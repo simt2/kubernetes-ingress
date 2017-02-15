@@ -1,0 +1,17 @@
+{{/* A stream ingress will only have one upstream in its map */}}
+{{range $upstream := .Upstreams}}
+upstream {{$upstream.Name}} {
+	{{range $server := $upstream.UpstreamServers}}
+	server {{$server.Address}}:{{$server.Port}};{{end}}
+}{{end}}
+
+{{/* A stream ingress will only have one server */}}
+{{ $server := index .Servers 0 }}
+server {
+    listen {{.StreamPort}} {{if eq .Protocol "udp" }} udp {{end}};
+
+    {{range $upstream := .Upstreams}}
+    proxy_pass {{$upstream.Name}};
+    {{end}}
+
+}

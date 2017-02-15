@@ -5,8 +5,8 @@ FROM nginx:1.11.8
 RUN ln -sf /proc/1/fd/1 /var/log/nginx/access.log \
 	&& ln -sf /proc/1/fd/2 /var/log/nginx/error.log
 
-COPY nginx-ingress nginx/ingress.tmpl nginx/nginx.conf.tmpl /
+COPY nginx-ingress nginx/ingress.http.tmpl nginx/ingress.stream.tmpl nginx/nginx.conf.tmpl /
 
-RUN rm /etc/nginx/conf.d/*
+RUN rm /etc/nginx/conf.d/* && mkdir /etc/nginx/stream.conf.d
 
 ENTRYPOINT ["/nginx-ingress"]

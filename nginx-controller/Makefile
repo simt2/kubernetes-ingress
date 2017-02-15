@@ -1,6 +1,6 @@
 all: push
 
-VERSION = 0.7.0
+VERSION = 0.7.0-stream
 TAG = $(VERSION)
 PREFIX = nginxdemos/nginx-ingress
 
@@ -8,7 +8,7 @@ DOCKER_RUN = docker run --rm -v $(shell pwd)/../:/go/src/github.com/nginxinc/kub
 GOLANG_CONTAINER = golang:1.7
 DOCKERFILE = Dockerfile
 
-BUILD_IN_CONTAINER = 1
+BUILD_IN_CONTAINER = 0
 PUSH_TO_GCR =
 
 ifeq ($(PUSH_TO_GCR),1)

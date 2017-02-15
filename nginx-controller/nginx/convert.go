@@ -40,6 +40,17 @@ func GetMapKeyAsInt(m map[string]string, key string, context apiObject) (int64, 
 	return 0, false, nil
 }
 
+func GetMapKeyAsUint16(m map[string]string, key string, context apiObject) (uint16, bool, error) {
+	if str, exists := m[key]; exists {
+		i, err := strconv.ParseUint(str, 10, 16)
+		if err != nil {
+			return 0, exists, fmt.Errorf("%s %v/%v '%s' contains invalid unsigned 16 bit integer: %v, ignoring", context.GetObjectKind().GroupVersionKind().Kind, context.GetNamespace(), context.GetName(), key, err)
+		}
+		return uint16(i), exists, nil
+	}
+	return uint16(0), false, nil
+}
+
 // GetMapKeyAsStringSlice tries to find and parse a key in the map as string slice splitting it on ','
 func GetMapKeyAsStringSlice(m map[string]string, key string, context apiObject) ([]string, bool, error) {
 	if str, exists := m[key]; exists {

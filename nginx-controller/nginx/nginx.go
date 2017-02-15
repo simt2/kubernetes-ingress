@@ -12,18 +12,26 @@ import (
 )
 
 const dhparamFilename = "dhparam.pem"
+const NginxProtocolHTTP = "http"
+const NginxProtocolTCP = "tcp"
+const NginxProtocolUDP = "udp"
 
 // NginxController Updates NGINX configuration, starts and reloads NGINX
 type NginxController struct {
-	nginxConfdPath string
-	nginxCertsPath string
-	local          bool
+	nginxConfdPath       string
+	nginxStreamConfdPath string
+	nginxCertsPath       string
+	local                bool
 }
 
 // IngressNginxConfig describes an NGINX configuration
 type IngressNginxConfig struct {
 	Upstreams []Upstream
 	Servers   []Server
+	Protocol  string
+
+	// Used for TCP and UDP, ignored when using HTTP
+	StreamPort uint16
 }
 
 // Upstream describes an NGINX upstream
@@ -102,9 +110,10 @@ func NewUpstreamWithDefaultServer(name string) Upstream {
 // NewNginxController creates a NGINX controller
 func NewNginxController(nginxConfPath string, local bool, healthStatus bool) (*NginxController, error) {
 	ngxc := NginxController{
-		nginxConfdPath: path.Join(nginxConfPath, "conf.d"),
-		nginxCertsPath: path.Join(nginxConfPath, "ssl"),
-		local:          local,
+		nginxConfdPath:       path.Join(nginxConfPath, "conf.d"),
+		nginxStreamConfdPath: path.Join(nginxConfPath, "stream.conf.d"),
+		nginxCertsPath:       path.Join(nginxConfPath, "ssl"),
+		local:                local,
 	}
 
 	if !local {
@@ -120,7 +129,14 @@ func NewNginxController(nginxConfPath string, local bool, healthStatus bool) (*N
 // DeleteIngress deletes the configuration file, which corresponds for the
 // specified ingress from NGINX conf directory
 func (nginx *NginxController) DeleteIngress(name string) {
-	filename := nginx.getIngressNginxConfigFileName(name)
+	// At the time of deletion, the annotation of the protocol is not known
+	// anymore. Check manually if the ingress was a stream or http ingress
+	filename := nginx.getIngressNginxConfigFileName(name, NginxProtocolHTTP)
+	if _, err := os.Stat(filename); os.IsNotExist(err) {
+		// If the ingress does not exist in conf.d, it exists in stream.d
+		filename = nginx.getIngressNginxConfigFileName(name, NginxProtocolTCP)
+	}
+
 	glog.V(3).Infof("deleting %v", filename)
 
 	if !nginx.local {
@@ -134,7 +150,7 @@ func (nginx *NginxController) DeleteIngress(name string) {
 // the specified configuration for the specified ingress
 func (nginx *NginxController) AddOrUpdateIngress(name string, config IngressNginxConfig) {
 	glog.V(3).Infof("Updating NGINX configuration")
-	filename := nginx.getIngressNginxConfigFileName(name)
+	filename := nginx.getIngressNginxConfigFileName(name, config.Protocol)
 	nginx.templateIt(config, filename)
 }
 
@@ -187,13 +203,23 @@ func (nginx *NginxController) AddOrUpdateCertAndKey(name string, cert string, ke
 	return pemFileName
 }
 
-func (nginx *NginxController) getIngressNginxConfigFileName(name string) string {
-	return path.Join(nginx.nginxConfdPath, name+".conf")
+func (nginx *NginxController) getIngressNginxConfigFileName(name string, protocol string) string {
+	if protocol == NginxProtocolHTTP {
+		return path.Join(nginx.nginxConfdPath, name+".conf")
+	} else {
+		return path.Join(nginx.nginxStreamConfdPath, name+".conf")
+	}
 }
 
 func (nginx *NginxController) templateIt(config IngressNginxConfig, filename string) {
-	tmpl, err := template.New("ingress.tmpl").ParseFiles("ingress.tmpl")
+	templateName := "ingress.http.tmpl"
+	if config.Protocol != NginxProtocolHTTP {
+		templateName = "ingress.stream.tmpl"
+	}
+
+	tmpl, err := template.New(templateName).ParseFiles(templateName)
 	if err != nil {
+		glog.Error(err)
 		glog.Fatal("Failed to parse template file")
 	}
 
@@ -215,6 +241,7 @@ func (nginx *NginxController) templateIt(config IngressNginxConfig, filename str
 		}
 	} else {
 		// print conf to stdout here
+		tmpl.Execute(os.Stdout, config)
 	}
 
 	glog.V(3).Infof("NGINX configuration file had been updated")
